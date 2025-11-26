@@ -320,7 +320,24 @@ def preprocess_FastF1_Laps(df: pd.DataFrame, OneHotEncoder=False) -> pd.DataFram
 
     # Creating Season-Round feature
     df["season-round"] = df["season"].astype(str) + df["round"].astype("str").str.zfill(2)
+    df["season-round-driver"] = df["season"].astype(str) + df["round"].astype("str").str.zfill(2) + "-" + df["driver"].astype(str)
     df["season-round-event"] = df["season"].astype(str) + df["round"].astype("str").str.zfill(2) + "-" + df["event"].astype(str)
+    df["season-round-event-driver"] = df["season"].astype(str) + df["round"].astype("str").str.zfill(2) + "-" + df["event"].astype(str)+ "-" + df["driver"].astype(str)
+
+    # Time features to milliseconds:
+    for i in ["laptime","sector1time","sector2time","sector3time","sector1sessiontime","sector2sessiontime","sector3sessiontime"]:
+        col_name=i+"_in_milliseconds"
+        df['time_clean'] = df[i].str.strip().fillna('0').apply(lambda x: x.split(' ')[-1])
+        df['len_time_clean'] = df['time_clean'].apply(lambda x: len(x))
+        df["time_clean"]=np.where(df["len_time_clean"]==15,df['time_clean'].apply(lambda x: x[3:-3]),df['time_clean'])
+        df["time_clean"]=np.where(df["len_time_clean"]==8,df['time_clean'].apply(lambda x: x[3:]+'.000'),df['time_clean'])
+        df[col_name]=df['time_clean'].apply(lambda x: None if x is None else time_features_to_milliseconds(str(x)))
+        df=df.drop(columns=["time_clean","len_time_clean"])
+
+    # Proportion of lap:
+    num_laps_per_race_df=df.groupby("season-round-event").agg(num_laps_per_race=("lapnumber","max")).reset_index()
+    df=df.merge(num_laps_per_race_df,on="season-round-event",how="left")
+    df["lapnumber_proportion"]=df["lapnumber"].astype("int")/df["num_laps_per_race"].astype("int")
 
     # Normalize features
     cols_to_norm=['tyrelife']
@@ -352,6 +369,7 @@ def preprocess_FastF1_Laps(df: pd.DataFrame, OneHotEncoder=False) -> pd.DataFram
             encoder_values=encoder.transform(df[i])
             name_encoded_feature=i+"_encoded"
             df[name_encoded_feature]=encoder_values
+
 
     return df.drop_duplicates()
 
